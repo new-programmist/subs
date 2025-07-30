@@ -125,7 +125,12 @@
       });
 
       // 平均増加速度の表示
-      const first = data[0], last = data[data.length - 1];
+      const last = data[data.length - 1];
+      if (data.length > 15) {
+	      const first = data[data.length - 15];
+	    } else {
+	      const first = data[0];
+	    }
       const subsDiff = last.subs - first.subs;
       const timeDiffMin = (last.time - first.time) / 60000;
 
