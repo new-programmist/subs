@@ -2,45 +2,48 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<title>登録者数 折れ線グラフ</title>
+<title>登録者数 折れ線グラフ（fetch失敗時はファイル選択）</title>
 <style>
-  canvas { border:1px solid #ccc; }
+  canvas { border:1px solid #ccc; margin-top: 10px; }
 </style>
 </head>
 <body>
 <h1>登録者数 折れ線グラフ</h1>
+
+<div id="fileInputContainer" style="display:none;">
+  <p>ファイルを選択してください：</p>
+  <input type="file" id="fileInput" accept=".txt" />
+</div>
+
 <canvas id="chart" width="900" height="400"></canvas>
+
 <script>
 const canvas = document.getElementById("chart");
 const ctx = canvas.getContext("2d");
+const fileInputContainer = document.getElementById("fileInputContainer");
+const fileInput = document.getElementById("fileInput");
 
-fetch('subs_log.txt')
-  .then(res => {
-    if (!res.ok) throw new Error("ファイル読み込み失敗");
-    return res.text();
-  })
-  .then(text => {
-    const lines = text.split(/\r?\n/);
-    const data = [];
+function parseAndDraw(text) {
+  const lines = text.split(/\r?\n/);
+  const data = [];
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const match = line.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}) .+? (\d+) subscribers$/);
-      if (!match) continue;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const match = line.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}) .+? (\d+) subscribers$/);
+    if (!match) continue;
 
-      const timeStr = match[1];
-      const subs = parseInt(match[2], 10);
-      const time = new Date(timeStr.replace(/\//g, "-"));
+    const timeStr = match[1];
+    const subs = parseInt(match[2], 10);
+    const time = new Date(timeStr.replace(/\//g, "-"));
 
-      data.push({ time, subs });
-    }
-    if (data.length === 0) throw new Error("データがありません");
-
-    drawLineGraph(data);
-  })
-  .catch(e => {
-    alert("エラー: " + e.message);
-  });
+    data.push({ time, subs });
+  }
+  if (data.length === 0) {
+    alert("データがありません");
+    return;
+  }
+  drawLineGraph(data);
+}
 
 function drawLineGraph(data) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -51,11 +54,18 @@ function drawLineGraph(data) {
   const w = canvas.width - margin * 2;
   const h = canvas.height - margin * 2;
 
-  // Y軸の範囲
-  const subsMin = Math.min(...data.map(d => d.subs));
-  const subsMax = Math.max(...data.map(d => d.subs));
+  let subsMin = Math.min(...data.map(d => d.subs));
+  let subsMax = Math.max(...data.map(d => d.subs));
+  if (subsMax === subsMin) {
+    subsMax += 1;
+    subsMin -= 1;
+  }
 
-  // 軸描画
+  const timeMin = data[0].time.getTime();
+  const timeMax = data[data.length-1].time.getTime();
+  const timeRange = timeMax - timeMin || 1;
+
+  // 軸
   ctx.strokeStyle = "#000";
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -64,7 +74,7 @@ function drawLineGraph(data) {
   ctx.lineTo(margin + w, margin + h);
   ctx.stroke();
 
-  // Y軸ラベル（5分割）
+  // Y軸ラベル
   ctx.fillStyle = "#000";
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
@@ -78,13 +88,13 @@ function drawLineGraph(data) {
     ctx.stroke();
   }
 
-  // X軸ラベル（6個くらい）
+  // X軸ラベル
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   const step = Math.max(1, Math.floor(data.length / 6));
   for(let i=0; i<data.length; i+=step){
     const d = data[i];
-    const x = margin + ((d.time.getTime() - data[0].time.getTime()) / (data[data.length-1].time.getTime() - data[0].time.getTime())) * w;
+    const x = margin + ((d.time.getTime() - timeMin) / timeRange) * w;
     const label = `${d.time.getHours().toString().padStart(2,'0')}:${d.time.getMinutes().toString().padStart(2,'0')}`;
     ctx.fillText(label, x, margin + h + 5);
     ctx.beginPath();
@@ -93,28 +103,59 @@ function drawLineGraph(data) {
     ctx.stroke();
   }
 
-  // 折れ線の描画
+  // 折れ線
   ctx.strokeStyle = "blue";
   ctx.lineWidth = 2;
   ctx.beginPath();
+  console.log(data)
   for(let i=0; i<data.length; i++){
     const d = data[i];
-    const x = margin + ((d.time.getTime() - data[0].time.getTime()) / (data[data.length-1].time.getTime() - data[0].time.getTime())) * w;
+    const x = margin + ((d.time.getTime() - timeMin) / timeRange) * w;
     const y = margin + h - ((d.subs - subsMin) / (subsMax - subsMin)) * h;
+    console.log([x,y])
     if(i === 0){
       ctx.moveTo(x, y);
     } else {
       ctx.lineTo(x, y);
     }
-
-    // データポイントを赤丸で表示
+  }
+  ctx.stroke()
+  for(let i=0; i<data.length; i++){
+    const d = data[i];
+    const x = margin + ((d.time.getTime() - timeMin) / timeRange) * w;
+    const y = margin + h - ((d.subs - subsMin) / (subsMax - subsMin)) * h;
     ctx.fillStyle = "red";
     ctx.beginPath();
     ctx.arc(x, y, 4, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.stroke();
 }
+
+// fetchして読み込み。失敗したらファイル選択を表示
+fetch('subs_log.txt')
+  .then(res => {
+    if(!res.ok) throw new Error("fetch失敗");
+    return res.text();
+  })
+  .then(text => {
+    parseAndDraw(text);
+  })
+  .catch(() => {
+    // fetch失敗時にファイル入力UIを表示
+    fileInputContainer.style.display = "block";
+  });
+
+// ファイル選択時に読み込み
+fileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    parseAndDraw(reader.result);
+  };
+  reader.readAsText(file, "utf-8");
+});
 </script>
 </body>
 </html>
