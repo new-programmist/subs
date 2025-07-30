@@ -2,13 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<title>登録者数 棒グラフ</title>
+<title>登録者数 折れ線グラフ</title>
 <style>
   canvas { border:1px solid #ccc; }
 </style>
 </head>
 <body>
-<h1>登録者数 棒グラフ</h1>
+<h1>登録者数 折れ線グラフ</h1>
 <canvas id="chart" width="900" height="400"></canvas>
 <script>
 const canvas = document.getElementById("chart");
@@ -36,13 +36,13 @@ fetch('subs_log.txt')
     }
     if (data.length === 0) throw new Error("データがありません");
 
-    drawBarGraph(data);
+    drawLineGraph(data);
   })
   .catch(e => {
     alert("エラー: " + e.message);
   });
 
-function drawBarGraph(data) {
+function drawLineGraph(data) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   data.sort((a,b) => a.time - b.time);
@@ -54,10 +54,6 @@ function drawBarGraph(data) {
   // Y軸の範囲
   const subsMin = Math.min(...data.map(d => d.subs));
   const subsMax = Math.max(...data.map(d => d.subs));
-
-  // 棒の幅
-  const barWidth = w / data.length * 0.8;
-  const gap = w / data.length * 0.2;
 
   // 軸描画
   ctx.strokeStyle = "#000";
@@ -88,7 +84,7 @@ function drawBarGraph(data) {
   const step = Math.max(1, Math.floor(data.length / 6));
   for(let i=0; i<data.length; i+=step){
     const d = data[i];
-    const x = margin + i * (barWidth + gap) + barWidth / 2;
+    const x = margin + ((d.time.getTime() - data[0].time.getTime()) / (data[data.length-1].time.getTime() - data[0].time.getTime())) * w;
     const label = `${d.time.getHours().toString().padStart(2,'0')}:${d.time.getMinutes().toString().padStart(2,'0')}`;
     ctx.fillText(label, x, margin + h + 5);
     ctx.beginPath();
@@ -97,16 +93,27 @@ function drawBarGraph(data) {
     ctx.stroke();
   }
 
-  // 棒の描画
+  // 折れ線の描画
+  ctx.strokeStyle = "blue";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
   for(let i=0; i<data.length; i++){
     const d = data[i];
-    const x = margin + i * (barWidth + gap);
-    const barHeight = ((d.subs - subsMin) / (subsMax - subsMin)) * h;
-    const y = margin + h - barHeight;
+    const x = margin + ((d.time.getTime() - data[0].time.getTime()) / (data[data.length-1].time.getTime() - data[0].time.getTime())) * w;
+    const y = margin + h - ((d.subs - subsMin) / (subsMax - subsMin)) * h;
+    if(i === 0){
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
 
-    ctx.fillStyle = "steelblue";
-    ctx.fillRect(x, y, barWidth, barHeight);
+    // データポイントを赤丸で表示
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
   }
+  ctx.stroke();
 }
 </script>
 </body>
