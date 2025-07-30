@@ -126,10 +126,11 @@
 
       // 平均増加速度の表示
       const last = data[data.length - 1];
+      let first = null
       if (data.length > 15) {
-	      const first = data[data.length - 15];
+	      first = data[data.length - 15];
 	    } else {
-	      const first = data[0];
+	      first = data[0];
 	    }
       const subsDiff = last.subs - first.subs;
       const timeDiffMin = (last.time - first.time) / 60000;
