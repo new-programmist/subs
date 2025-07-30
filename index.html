@@ -150,7 +150,7 @@
     }
 
     // 読み込み処理
-    fetch("subs_log.txt")
+    fetch('subs_log.txt', { cache: 'no-store' })
       .then(r => r.ok ? r.text() : Promise.reject())
       .then(parseAndDraw)
       .catch(() => {
