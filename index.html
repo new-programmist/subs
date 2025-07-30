@@ -136,7 +136,7 @@ function drawLineGraph(data) {
 }
 
 // fetchして読み込み。失敗したらファイル選択を表示
-fetch('subs_log.txt')
+fetch('subs_log.txt', { cache: 'no-store' })
   .then(res => {
     if(!res.ok) throw new Error("fetch失敗");
     return res.text();
