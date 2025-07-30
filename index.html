@@ -1,166 +1,152 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<title>登録者数 折れ線グラフ（fetch失敗時はファイル選択）</title>
-<style>
-  canvas { border:1px solid #ccc; margin-top: 10px; }
-</style>
+  <meta charset="UTF-8" />
+  <title>@ゆっくりhoneboneの登録者グラフ</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; }
+    canvas { border: 1px solid #ccc; margin-top: 10px; }
+    #unitSelector { margin: 10px; }
+  </style>
 </head>
 <body>
-<h1>登録者数 折れ線グラフ</h1>
+  <div id="unitSelector">
+    <label><input type="radio" name="unit" value="minute" checked> 分</label>
+    <label><input type="radio" name="unit" value="hour"> 時</label>
+    <label><input type="radio" name="unit" value="day"> 日</label>
+  </div>
+  <canvas id="graphCanvas" width="800" height="400"></canvas>
+  <div id="fileInputContainer" style="display:none;">
+    <input type="file" id="fileInput" accept=".txt">
+  </div>
 
-<div id="fileInputContainer" style="display:none;">
-  <p>ファイルを選択してください：</p>
-  <input type="file" id="fileInput" accept=".txt" />
-</div>
+  <script>
+    const canvas = document.getElementById("graphCanvas");
+    const ctx = canvas.getContext("2d");
+    const fileInputContainer = document.getElementById("fileInputContainer");
+    const fileInput = document.getElementById("fileInput");
+    let parsedData = [];
 
-<canvas id="chart" width="900" height="400"></canvas>
+    function parseLog(text) {
+      const lines = text.trim().split("\n");
+      const data = lines.map(line => {
+        const match = line.match(/^([\d/ :]+)\s+(.+?)\s+(\d+)\s+subscribers$/);
+        if (!match) return null;
+        const [, timestamp, , subs] = match;
+        return {
+          time: new Date(timestamp),
+          subs: parseInt(subs, 10)
+        };
+      }).filter(x => x !== null);
+      return data;
+    }
 
-<script>
-const canvas = document.getElementById("chart");
-const ctx = canvas.getContext("2d");
-const fileInputContainer = document.getElementById("fileInputContainer");
-const fileInput = document.getElementById("fileInput");
+    function drawLineGraph(data, unit = "minute") {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-function parseAndDraw(text) {
-  const lines = text.split(/\r?\n/);
-  const data = [];
+      if (data.length < 2) return;
 
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const match = line.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}) .+? (\d+) subscribers$/);
-    if (!match) continue;
+      const margin = 40;
+      const times = data.map(d => d.time.getTime());
+      const subs = data.map(d => d.subs);
+      const minTime = Math.min(...times);
+      const maxTime = Math.max(...times);
+      const minSubs = Math.min(...subs);
+      const maxSubs = Math.max(...subs);
 
-    const timeStr = match[1];
-    const subs = parseInt(match[2], 10);
-    const time = new Date(timeStr.replace(/\//g, "-"));
+      // 座標変換
+      function getX(time) {
+        return margin + ((time - minTime) / (maxTime - minTime)) * (canvas.width - 2 * margin);
+      }
+      function getY(sub) {
+        return canvas.height - margin - ((sub - minSubs) / (maxSubs - minSubs)) * (canvas.height - 2 * margin);
+      }
 
-    data.push({ time, subs });
-  }
-  if (data.length === 0) {
-    alert("データがありません");
-    return;
-  }
-  drawLineGraph(data);
-}
-
-function drawLineGraph(data) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  data.sort((a,b) => a.time - b.time);
-
-  const margin = 50;
-  const w = canvas.width - margin * 2;
-  const h = canvas.height - margin * 2;
-
-  let subsMin = Math.min(...data.map(d => d.subs));
-  let subsMax = Math.max(...data.map(d => d.subs));
-  if (subsMax === subsMin) {
-    subsMax += 1;
-    subsMin -= 1;
-  }
-
-  const timeMin = data[0].time.getTime();
-  const timeMax = data[data.length-1].time.getTime();
-  const timeRange = timeMax - timeMin || 1;
-
-  // 軸
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(margin, margin);
-  ctx.lineTo(margin, margin + h);
-  ctx.lineTo(margin + w, margin + h);
-  ctx.stroke();
-
-  // Y軸ラベル
-  ctx.fillStyle = "#000";
-  ctx.textAlign = "right";
-  ctx.textBaseline = "middle";
-  for(let i=0; i<=5; i++){
-    const y = margin + h - (h / 5) * i;
-    const val = Math.round(subsMin + (subsMax - subsMin) / 5 * i);
-    ctx.fillText(val.toString(), margin - 5, y);
-    ctx.beginPath();
-    ctx.moveTo(margin - 3, y);
-    ctx.lineTo(margin, y);
-    ctx.stroke();
-  }
-
-  // X軸ラベル
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  const step = Math.max(1, Math.floor(data.length / 6));
-  let prevx = -1000
-  for(let i=0; i<data.length; i+=step){
-    const d = data[i];
-    const x = margin + ((d.time.getTime() - timeMin) / timeRange) * w;
-    const label = `${d.time.getFullYear().toString().padStart(2,'0')}/${d.time.getMonth().toString().padStart(2,'0')}/${d.time.getDate().toString().padStart(2,'0')} ${d.time.getHours().toString().padStart(2,'0')}:${d.time.getMinutes().toString().padStart(2,'0')}`;
-    if (x - prevx > 100){
-      ctx.fillText(label, x, margin + h + 5);
+      // 軸
+      ctx.strokeStyle = "#000";
       ctx.beginPath();
-      ctx.moveTo(x, margin + h);
-      ctx.lineTo(x, margin + h + 3);
+      ctx.moveTo(margin, margin);
+      ctx.lineTo(margin, canvas.height - margin);
+      ctx.lineTo(canvas.width - margin, canvas.height - margin);
       ctx.stroke();
-      prevx = x
+
+      // 線
+      ctx.beginPath();
+      ctx.strokeStyle = "#0077cc";
+      ctx.lineWidth = 2;
+      data.forEach((d, i) => {
+        const x = getX(d.time.getTime());
+        const y = getY(d.subs);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // 平均増加速度の表示
+      const first = data[0];
+      const last = data[data.length - 1];
+      const subsDiff = last.subs - first.subs;
+      const msDiff = last.time - first.time;
+      let unitLabel = "", rate = 0;
+
+      if (msDiff > 0) {
+        if (unit === "minute") {
+          rate = subsDiff / (msDiff / (1000 * 60));
+          unitLabel = "人/分";
+        } else if (unit === "hour") {
+          rate = subsDiff / (msDiff / (1000 * 60 * 60));
+          unitLabel = "人/時";
+        } else if (unit === "day") {
+          rate = subsDiff / (msDiff / (1000 * 60 * 60 * 24));
+          unitLabel = "人/日";
+        }
+      }
+
+      ctx.fillStyle = "black";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.font = "16px sans-serif";
+      ctx.fillText(
+        `平均増加速度: ${rate.toFixed(2)} ${unitLabel}`,
+        canvas.width - 10,
+        10
+      );
     }
-  }
 
-  // 折れ線
-  ctx.strokeStyle = "blue";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  console.log(data)
-  for(let i=0; i<data.length; i++){
-    const d = data[i];
-    const x = margin + ((d.time.getTime() - timeMin) / timeRange) * w;
-    const y = margin + h - ((d.subs - subsMin) / (subsMax - subsMin)) * h;
-    console.log([x,y])
-    if(i === 0){
-      ctx.moveTo(x, y);
-    } else {
-      ctx.lineTo(x, y);
+    function parseAndDraw(text) {
+      parsedData = parseLog(text);
+      const selectedUnit = document.querySelector('input[name="unit"]:checked').value;
+      drawLineGraph(parsedData, selectedUnit);
     }
-  }
-  ctx.stroke()
-  for(let i=0; i<data.length; i++){
-    const d = data[i];
-    const x = margin + ((d.time.getTime() - timeMin) / timeRange) * w;
-    const y = margin + h - ((d.subs - subsMin) / (subsMax - subsMin)) * h;
-    ctx.fillStyle = "red";
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
 
-// fetchして読み込み。失敗したらファイル選択を表示
-fetch('subs_log.txt', { cache: 'no-store' })
-  .then(res => {
-    if(!res.ok) throw new Error("fetch失敗");
-    return res.text();
-  })
-  .then(text => {
-    parseAndDraw(text);
-  })
-  .catch(() => {
-    // fetch失敗時にファイル入力UIを表示
-    fileInputContainer.style.display = "block";
-  });
+    document.querySelectorAll('input[name="unit"]').forEach(input => {
+      input.addEventListener('change', () => {
+        if (parsedData.length > 0) {
+          drawLineGraph(parsedData, input.value);
+        }
+      });
+    });
 
-// ファイル選択時に読み込み
-fileInput.addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if(!file) return;
+    // fetch (キャッシュバスター付き)
+    fetch('subs_log.txt?' + Date.now())
+      .then(res => {
+        if (!res.ok) throw new Error("読み込み失敗");
+        return res.text();
+      })
+      .then(parseAndDraw)
+      .catch(err => {
+        console.warn("fetch失敗:", err);
+        fileInputContainer.style.display = "block";
+      });
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    parseAndDraw(reader.result);
-  };
-  reader.readAsText(file, "utf-8");
-});
-</script>
+    fileInput.addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => parseAndDraw(e.target.result);
+      reader.readAsText(file);
+    });
+  </script>
 </body>
 </html>
 
