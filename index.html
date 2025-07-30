@@ -92,15 +92,19 @@ function drawLineGraph(data) {
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   const step = Math.max(1, Math.floor(data.length / 6));
+  let prevx = -1000
   for(let i=0; i<data.length; i+=step){
     const d = data[i];
     const x = margin + ((d.time.getTime() - timeMin) / timeRange) * w;
-    const label = `${d.time.getHours().toString().padStart(2,'0')}:${d.time.getMinutes().toString().padStart(2,'0')}`;
-    ctx.fillText(label, x, margin + h + 5);
-    ctx.beginPath();
-    ctx.moveTo(x, margin + h);
-    ctx.lineTo(x, margin + h + 3);
-    ctx.stroke();
+    const label = `${d.time.getFullYear().toString().padStart(2,'0')}/${d.time.getMonth().toString().padStart(2,'0')}/${d.time.getDate().toString().padStart(2,'0')} ${d.time.getHours().toString().padStart(2,'0')}:${d.time.getMinutes().toString().padStart(2,'0')}`;
+    if (x - prevx > 100){
+      ctx.fillText(label, x, margin + h + 5);
+      ctx.beginPath();
+      ctx.moveTo(x, margin + h);
+      ctx.lineTo(x, margin + h + 3);
+      ctx.stroke();
+      prevx = x
+    }
   }
 
   // 折れ線
