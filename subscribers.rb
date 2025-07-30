@@ -25,9 +25,9 @@ loop do
 
     # git操作を非同期で実行
     Thread.new do
-      system("git add #{LOGFILE}")
-      system("git commit -m 'update at #{timestamp}'")
-      system("git push")
+      system("git add #{LOGFILE} > /dev/null 2>&1")
+      system("git commit -m 'update at #{timestamp}' > /dev/null 2>&1")
+      system("git push > /dev/null 2>&1")
     end
   end
 
