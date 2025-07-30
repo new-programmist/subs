@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>登録者数グラフ</title>
+<style>
+  canvas { border:1px solid #ccc; }
+</style>
+</head>
+<body>
+<h1>登録者数グラフ表示</h1>
+<input type="file" id="fileInput" accept=".txt" />
+<br />
+<canvas id="chart" width="800" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById("chart");
+const ctx = canvas.getContext("2d");
+
+document.getElementById("fileInput").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const lines = reader.result.split(/\r?\n/);
+    const data = [];
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      // フォーマット例: 2025/07/30 14:56:00 ほねぼーん【ゆっくり】 319 subscribers
+      const match = line.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}) .+? (\d+) subscribers$/);
+      if (!match) continue;
+
+      const timeStr = match[1];
+      const subs = parseInt(match[2], 10);
+      const time = new Date(timeStr.replace(/\//g, "-")); // 文字列をDateに変換（安定のため"-"に置換）
+
+      data.push({ time, subs });
+    }
+
+    if (data.length === 0) {
+      alert("データがありません。");
+      return;
+    }
+
+    drawGraph(data);
+  };
+  reader.readAsText(file, "utf-8");
+});
+
+function drawGraph(data) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 時刻でソート（念のため）
+  data.sort((a, b) => a.time - b.time);
+
+  const margin = 50;
+  const w = canvas.width - margin * 2;
+  const h = canvas.height - margin * 2;
+
+  // X軸：時間の範囲
+  const timeMin = data[0].time.getTime();
+  const timeMax = data[data.length - 1].time.getTime();
+
+  // Y軸：登録者数の範囲
+  const subsMin = Math.min(...data.map(d => d.subs));
+  const subsMax = Math.max(...data.map(d => d.subs));
+
+  // 軸の描画
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  // Y軸
+  ctx.moveTo(margin, margin);
+  ctx.lineTo(margin, margin + h);
+  // X軸
+  ctx.lineTo(margin + w, margin + h);
+  ctx.stroke();
+
+  ctx.fillStyle = "#000";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+
+  // Y軸ラベル (5等分)
+  for (let i = 0; i <= 5; i++) {
+    const y = margin + h - (h / 5) * i;
+    const val = Math.round(subsMin + ((subsMax - subsMin) / 5) * i);
+    ctx.fillText(val.toString(), margin - 5, y);
+    ctx.beginPath();
+    ctx.moveTo(margin - 3, y);
+    ctx.lineTo(margin, y);
+    ctx.stroke();
+  }
+
+  // X軸ラベル (時間)
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const step = Math.max(1, Math.floor(data.length / 6));
+  for (let i = 0; i < data.length; i += step) {
+    const d = data[i];
+    const x = margin + ((d.time.getTime() - timeMin) / (timeMax - timeMin)) * w;
+    const label = `${d.time.getHours().toString().padStart(2,"0")}:${d.time.getMinutes().toString().padStart(2,"0")}`;
+    ctx.fillText(label, x, margin + h + 5);
+    ctx.beginPath();
+    ctx.moveTo(x, margin + h);
+    ctx.lineTo(x, margin + h + 3);
+    ctx.stroke();
+  }
+
+  // グラフの描画（折れ線）
+  ctx.strokeStyle = "blue";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < data.length; i++) {
+    const d = data[i];
+    const x = margin + ((d.time.getTime() - timeMin) / (timeMax - timeMin)) * w;
+    const y = margin + h - ((d.subs - subsMin) / (subsMax - subsMin)) * h;
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+    // 点も描く
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+  ctx.stroke();
+}
+</script>
+</body>
+</html>
+
