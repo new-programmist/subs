@@ -7,6 +7,11 @@
     body { font-family: sans-serif; text-align: center; }
     canvas { border: 1px solid #ccc; margin-top: 10px; }
     #unitSelector { margin: 10px; }
+    #avgRateDisplay {
+      margin-top: 10px;
+      font-size: 16px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -16,6 +21,7 @@
     <label><input type="radio" name="unit" value="day"> 日</label>
   </div>
   <canvas id="graphCanvas" width="800" height="400"></canvas>
+  <div id="avgRateDisplay">平均増加速度: -</div>
   <div id="fileInputContainer" style="display:none;">
     <input type="file" id="fileInput" accept=".txt">
   </div>
@@ -24,10 +30,11 @@
     const canvas = document.getElementById("graphCanvas");
     const ctx = canvas.getContext("2d");
     const unitRadios = document.querySelectorAll("input[name='unit']");
+    const avgRateDisplay = document.getElementById("avgRateDisplay");
     let globalData = [];
 
     unitRadios.forEach(radio => {
-      radio.addEventListener("change", () => drawLineGraph(globalData));
+      radio.addEventListener("change", () => updateAvgRate());
     });
 
     function parseAndDraw(text) {
@@ -44,6 +51,7 @@
       if (data.length > 1) {
         globalData = data;
         drawLineGraph(data);
+        updateAvgRate();
       }
     }
 
@@ -72,7 +80,7 @@
       ctx.lineTo(canvas.width - padding, canvas.height - padding);
       ctx.stroke();
 
-      // Y軸目盛（登録者数）
+      // Y軸目盛
       ctx.fillStyle = "black";
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
@@ -88,14 +96,17 @@
         ctx.stroke();
       }
 
-      // X軸目盛（時間）
+      // X軸目盛
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       for (let i = 0; i <= steps; i++) {
         const x = minX + (maxX - minX) * i / steps;
         const cx = toCanvasX(x);
         const date = new Date(x);
-        const label = date.toLocaleTimeString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const label = date.toLocaleTimeString([], {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        });
         ctx.fillText(label, cx, canvas.height - padding + 5);
         ctx.strokeStyle = "#eee";
         ctx.beginPath();
@@ -123,15 +134,17 @@
         ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
         ctx.fill();
       });
+    }
 
-      // 平均増加速度の表示
+    function updateAvgRate() {
+      const data = globalData;
+      if (data.length < 2) {
+        avgRateDisplay.textContent = "平均増加速度: N/A";
+        return;
+      }
+
       const last = data[data.length - 1];
-      let first = null
-      if (data.length > 15) {
-	      first = data[data.length - 15];
-	    } else {
-	      first = data[0];
-	    }
+      let first = data.length > 15 ? data[data.length - 15] : data[0];
       const subsDiff = last.subs - first.subs;
       const timeDiffMin = (last.time - first.time) / 60000;
 
@@ -141,12 +154,7 @@
       else if (unit === "day") { unitName = "日"; factor = 1440; }
 
       const avgRate = timeDiffMin > 0 ? (subsDiff / timeDiffMin * factor).toFixed(2) : "N/A";
-
-      ctx.fillStyle = "black";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "top";
-      ctx.font = "16px sans-serif";
-      ctx.fillText(`平均増加速度: ${avgRate} 人/${unitName}`, canvas.width - 10, 10);
+      avgRateDisplay.textContent = `平均増加速度: ${avgRate} 人/${unitName}`;
     }
 
     // 読み込み処理
