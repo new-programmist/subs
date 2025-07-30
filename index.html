@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>@ゆっくりhoneboneの登録者グラフ</title>
   <style>
     body { font-family: sans-serif; text-align: center; }
@@ -23,129 +23,141 @@
   <script>
     const canvas = document.getElementById("graphCanvas");
     const ctx = canvas.getContext("2d");
-    const fileInputContainer = document.getElementById("fileInputContainer");
-    const fileInput = document.getElementById("fileInput");
-    let parsedData = [];
+    const unitRadios = document.querySelectorAll("input[name='unit']");
+    let globalData = [];
 
-    function parseLog(text) {
+    unitRadios.forEach(radio => {
+      radio.addEventListener("change", () => drawLineGraph(globalData));
+    });
+
+    function parseAndDraw(text) {
       const lines = text.trim().split("\n");
       const data = lines.map(line => {
-        const match = line.match(/^([\d/ :]+)\s+(.+?)\s+(\d+)\s+subscribers$/);
+        const match = line.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}) .*? (\d+) subscribers$/);
         if (!match) return null;
-        const [, timestamp, , subs] = match;
         return {
-          time: new Date(timestamp),
-          subs: parseInt(subs, 10)
+          time: new Date(match[1]),
+          subs: parseInt(match[2], 10)
         };
-      }).filter(x => x !== null);
-      return data;
+      }).filter(Boolean);
+
+      if (data.length > 1) {
+        globalData = data;
+        drawLineGraph(data);
+      }
     }
 
-    function drawLineGraph(data, unit = "minute") {
+    function drawLineGraph(data) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (data.length < 2) return;
+      const padding = 40;
+      const points = data.map(d => ({ x: d.time.getTime(), y: d.subs }));
+      const minX = Math.min(...points.map(p => p.x));
+      const maxX = Math.max(...points.map(p => p.x));
+      const minY = Math.min(...points.map(p => p.y));
+      const maxY = Math.max(...points.map(p => p.y));
 
-      const margin = 40;
-      const times = data.map(d => d.time.getTime());
-      const subs = data.map(d => d.subs);
-      const minTime = Math.min(...times);
-      const maxTime = Math.max(...times);
-      const minSubs = Math.min(...subs);
-      const maxSubs = Math.max(...subs);
-
-      // 座標変換
-      function getX(time) {
-        return margin + ((time - minTime) / (maxTime - minTime)) * (canvas.width - 2 * margin);
+      function toCanvasX(x) {
+        return padding + (x - minX) / (maxX - minX) * (canvas.width - 2 * padding);
       }
-      function getY(sub) {
-        return canvas.height - margin - ((sub - minSubs) / (maxSubs - minSubs)) * (canvas.height - 2 * margin);
+      function toCanvasY(y) {
+        return canvas.height - padding - (y - minY) / (maxY - minY) * (canvas.height - 2 * padding);
       }
 
       // 軸
-      ctx.strokeStyle = "#000";
+      ctx.strokeStyle = "#888";
       ctx.beginPath();
-      ctx.moveTo(margin, margin);
-      ctx.lineTo(margin, canvas.height - margin);
-      ctx.lineTo(canvas.width - margin, canvas.height - margin);
+      ctx.moveTo(padding, padding);
+      ctx.lineTo(padding, canvas.height - padding);
+      ctx.lineTo(canvas.width - padding, canvas.height - padding);
       ctx.stroke();
 
-      // 線
+      // Y軸目盛（登録者数）
+      ctx.fillStyle = "black";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      const steps = 5;
+      for (let i = 0; i <= steps; i++) {
+        const y = minY + (maxY - minY) * i / steps;
+        const cy = toCanvasY(y);
+        ctx.fillText(Math.round(y), padding - 5, cy);
+        ctx.strokeStyle = "#eee";
+        ctx.beginPath();
+        ctx.moveTo(padding, cy);
+        ctx.lineTo(canvas.width - padding, cy);
+        ctx.stroke();
+      }
+
+      // X軸目盛（時間）
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      for (let i = 0; i <= steps; i++) {
+        const x = minX + (maxX - minX) * i / steps;
+        const cx = toCanvasX(x);
+        const date = new Date(x);
+        const label = date.toLocaleTimeString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        ctx.fillText(label, cx, canvas.height - padding + 5);
+        ctx.strokeStyle = "#eee";
+        ctx.beginPath();
+        ctx.moveTo(cx, padding);
+        ctx.lineTo(cx, canvas.height - padding);
+        ctx.stroke();
+      }
+
+      // 折れ線と点
+      ctx.strokeStyle = "blue";
       ctx.beginPath();
-      ctx.strokeStyle = "#0077cc";
-      ctx.lineWidth = 2;
       data.forEach((d, i) => {
-        const x = getX(d.time.getTime());
-        const y = getY(d.subs);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        const cx = toCanvasX(d.time.getTime());
+        const cy = toCanvasY(d.subs);
+        if (i === 0) ctx.moveTo(cx, cy);
+        else ctx.lineTo(cx, cy);
       });
       ctx.stroke();
 
-      // 平均増加速度の表示
-      const first = data[0];
-      const last = data[data.length - 1];
-      const subsDiff = last.subs - first.subs;
-      const msDiff = last.time - first.time;
-      let unitLabel = "", rate = 0;
+      ctx.fillStyle = "red";
+      data.forEach(d => {
+        const cx = toCanvasX(d.time.getTime());
+        const cy = toCanvasY(d.subs);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
+        ctx.fill();
+      });
 
-      if (msDiff > 0) {
-        if (unit === "minute") {
-          rate = subsDiff / (msDiff / (1000 * 60));
-          unitLabel = "人/分";
-        } else if (unit === "hour") {
-          rate = subsDiff / (msDiff / (1000 * 60 * 60));
-          unitLabel = "人/時";
-        } else if (unit === "day") {
-          rate = subsDiff / (msDiff / (1000 * 60 * 60 * 24));
-          unitLabel = "人/日";
-        }
-      }
+      // 平均増加速度の表示
+      const first = data[0], last = data[data.length - 1];
+      const subsDiff = last.subs - first.subs;
+      const timeDiffMin = (last.time - first.time) / 60000;
+
+      const unit = document.querySelector("input[name='unit']:checked").value;
+      let unitName = "分", factor = 1;
+      if (unit === "hour") { unitName = "時"; factor = 60; }
+      else if (unit === "day") { unitName = "日"; factor = 1440; }
+
+      const avgRate = timeDiffMin > 0 ? (subsDiff / timeDiffMin * factor).toFixed(2) : "N/A";
 
       ctx.fillStyle = "black";
       ctx.textAlign = "right";
       ctx.textBaseline = "top";
       ctx.font = "16px sans-serif";
-      ctx.fillText(
-        `平均増加速度: ${rate.toFixed(2)} ${unitLabel}`,
-        canvas.width - 10,
-        10
-      );
+      ctx.fillText(`平均増加速度: ${avgRate} 人/${unitName}`, canvas.width - 10, 10);
     }
 
-    function parseAndDraw(text) {
-      parsedData = parseLog(text);
-      const selectedUnit = document.querySelector('input[name="unit"]:checked').value;
-      drawLineGraph(parsedData, selectedUnit);
-    }
-
-    document.querySelectorAll('input[name="unit"]').forEach(input => {
-      input.addEventListener('change', () => {
-        if (parsedData.length > 0) {
-          drawLineGraph(parsedData, input.value);
-        }
-      });
-    });
-
-    // fetch (キャッシュバスター付き)
-    fetch('subs_log.txt?' + Date.now())
-      .then(res => {
-        if (!res.ok) throw new Error("読み込み失敗");
-        return res.text();
-      })
+    // 読み込み処理
+    fetch("subs_log.txt")
+      .then(r => r.ok ? r.text() : Promise.reject())
       .then(parseAndDraw)
-      .catch(err => {
-        console.warn("fetch失敗:", err);
-        fileInputContainer.style.display = "block";
+      .catch(() => {
+        document.getElementById("fileInputContainer").style.display = "block";
+        document.getElementById("fileInput").addEventListener("change", e => {
+          const file = e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = () => parseAndDraw(reader.result);
+            reader.readAsText(file);
+          }
+        });
       });
-
-    fileInput.addEventListener("change", e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = e => parseAndDraw(e.target.result);
-      reader.readAsText(file);
-    });
   </script>
 </body>
 </html>
