@@ -1,5 +1,13 @@
 LOGFILE = "subs_log.txt"
 URL = "https://www.youtube.com/@ゆっくりhonebone"
+def get_subscribers(url)
+  if ENV["YOUTUBE_API_KEY"].nil?
+    puts "\e[31mYOUTUBE_API_KEY is not set, using slow method\e[0m"
+    return %x{ yt-dlp -j "#{url}" | jq -r 'select(.channel != null) | "\\(.channel) \\(.channel_follower_count) subscribers"' | head -n 1 }.chomp
+  end
+  `curl -s "https://www.googleapis.com/youtube/v3/channels?key=#{ENV["YOUTUBE_API_KEY"]}&forHandle=@#{url[url.index("@") + 1..].bytes.map{_1.to_s(16).rjust(2, "0")}.join}}&part=snippet,statistics" | j
+q -r '.items[] | [(.snippet.title | gsub(" "; "\\\\40")), .statistics.subscriberCount + " subscribers"] | join(" ")'`
+end
 prev_output = ""
 prev_save = ""
 prev_save_time = Time.now - 3000
@@ -8,7 +16,7 @@ loop do
   timestamp = time.strftime("%Y/%m/%d %H:%M:%S")
 
   # yt-dlp + jq 実行
-  output = %x{ yt-dlp -j "#{URL}" | jq -r 'select(.channel != null) | "\\(.channel) \\(.channel_follower_count) subscribers"' | head -n 1 }.chomp
+  output = get_subscribers(URL)#%x{ yt-dlp -j "#{URL}" | jq -r 'select(.channel != null) | "\\(.channel) \\(.channel_follower_count) subscribers"' | head -n 1 }.chomp
 
   # 出力が無ければスキップ
   if output.nil? || output.strip.empty?
