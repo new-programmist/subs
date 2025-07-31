@@ -6,7 +6,7 @@
   <style>
     body { font-family: sans-serif; text-align: center; }
     canvas { border: 1px solid #ccc; margin-top: 10px; }
-    #unitSelector { margin: 10px; }
+    #unitSelector, #displayModeSelector { margin: 10px; }
     #avgRateDisplay {
       margin-top: 10px;
       font-size: 16px;
@@ -20,8 +20,15 @@
     <label><input type="radio" name="unit" value="hour"> 時</label>
     <label><input type="radio" name="unit" value="day"> 日</label>
   </div>
+
+  <div id="displayModeSelector">
+    <label><input type="radio" name="displayMode" value="subs" checked> 登録者数</label>
+    <label><input type="radio" name="displayMode" value="rate"> 増加速度</label>
+  </div>
+
   <canvas id="graphCanvas" width="800" height="400"></canvas>
   <div id="avgRateDisplay">平均増加速度: -</div>
+
   <div id="fileInputContainer" style="display:none;">
     <input type="file" id="fileInput" accept=".txt">
   </div>
@@ -30,11 +37,20 @@
     const canvas = document.getElementById("graphCanvas");
     const ctx = canvas.getContext("2d");
     const unitRadios = document.querySelectorAll("input[name='unit']");
+    const displayModeRadios = document.querySelectorAll("input[name='displayMode']");
     const avgRateDisplay = document.getElementById("avgRateDisplay");
     let globalData = [];
+    let currentDisplayMode = "subs";
 
     unitRadios.forEach(radio => {
       radio.addEventListener("change", () => updateAvgRate());
+    });
+
+    displayModeRadios.forEach(radio => {
+      radio.addEventListener("change", () => {
+        currentDisplayMode = document.querySelector("input[name='displayMode']:checked").value;
+        drawLineGraph(globalData);
+      });
     });
 
     function parseAndDraw(text) {
@@ -56,87 +72,139 @@
     }
 
     function drawLineGraph(data) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const padding = 40;
+  let points;
 
-      const padding = 40;
-      const points = data.map(d => ({ x: d.time.getTime(), y: d.subs }));
-      const minX = Math.min(...points.map(p => p.x));
-      const maxX = Math.max(...points.map(p => p.x));
-      const minY = Math.min(...points.map(p => p.y));
-      const maxY = Math.max(...points.map(p => p.y));
+  if (currentDisplayMode === "subs") {
+    points = data.map(d => ({ x: d.time.getTime(), y: d.subs }));
+  } else if (currentDisplayMode === "rate") {
+    points = [];
+　　minago = 30
+    for (let i = 0; i < data.length; i++) {
+      const current = data[i];
+      const targetTime = current.time.getTime() - minago * 60 * 1000; // 10分前
 
-      function toCanvasX(x) {
-        return padding + (x - minX) / (maxX - minX) * (canvas.width - 2 * padding);
+      // 前後の2点を探す
+      let before = null, after = null;
+      for (let j = i - 1; j >= 0; j--) {
+        if (data[j].time.getTime() <= targetTime) {
+          before = data[j];
+          break;
+        }
       }
-      function toCanvasY(y) {
-        return canvas.height - padding - (y - minY) / (maxY - minY) * (canvas.height - 2 * padding);
-      }
-
-      // 軸
-      ctx.strokeStyle = "#888";
-      ctx.beginPath();
-      ctx.moveTo(padding, padding);
-      ctx.lineTo(padding, canvas.height - padding);
-      ctx.lineTo(canvas.width - padding, canvas.height - padding);
-      ctx.stroke();
-
-      // Y軸目盛
-      ctx.fillStyle = "black";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      const steps = 6;
-      for (let i = 0; i <= steps; i++) {
-        const y = minY + (maxY - minY) * i / steps;
-        const cy = toCanvasY(y);
-        ctx.fillText(Math.round(y), padding - 5, cy);
-        ctx.strokeStyle = "#eee";
-        ctx.beginPath();
-        ctx.moveTo(padding, cy);
-        ctx.lineTo(canvas.width - padding, cy);
-        ctx.stroke();
+      for (let j = i; j < data.length; j++) {
+        if (data[j].time.getTime() >= targetTime) {
+          after = data[j];
+          break;
+        }
       }
 
-      // X軸目盛
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      for (let i = 0; i <= steps; i++) {
-        const x = minX + (maxX - minX) * i / steps;
-        const cx = toCanvasX(x);
-        const date = new Date(x);
-        const label = date.toLocaleTimeString([], {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit'
-        });
-        ctx.fillText(label, cx, canvas.height - padding + 5);
-        ctx.strokeStyle = "#eee";
-        ctx.beginPath();
-        ctx.moveTo(cx, padding);
-        ctx.lineTo(cx, canvas.height - padding);
-        ctx.stroke();
+      let subs10minAgo = null;
+      if (before && after && before !== after) {
+        // 線形補間
+        const t0 = before.time.getTime();
+        const t1 = after.time.getTime();
+        const s0 = before.subs;
+        const s1 = after.subs;
+        const ratio = (targetTime - t0) / (t1 - t0);
+        subs10minAgo = s0 + (s1 - s0) * ratio;
+      } else if (before) {
+        subs10minAgo = before.subs;
+      } else if (after) {
+        subs10minAgo = after.subs;
       }
-      ctx.fillText("画面の最終更新時刻：" + new Date().toString(), 240, padding - 15);
 
-      // 折れ線と点
-      ctx.strokeStyle = "blue";
-      ctx.beginPath();
-      data.forEach((d, i) => {
-        const cx = toCanvasX(d.time.getTime());
-        const cy = toCanvasY(d.subs);
-        if (i === 0) ctx.moveTo(cx, cy);
-        else ctx.lineTo(cx, cy);
-      });
-      ctx.stroke();
-
-      ctx.fillStyle = "red";
-      data.forEach(d => {
-        const cx = toCanvasX(d.time.getTime());
-        const cy = toCanvasY(d.subs);
-        ctx.beginPath();
-        ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
-        ctx.fill();
-      });
-      window.setTimeout(() => fetchanddraw(), 10000);
+      if (subs10minAgo !== null) {
+        const rate = (current.subs - subs10minAgo) / minago;
+        points.push({ x: current.time.getTime(), y: rate });
+      }
     }
+  }
+
+  if (!points || points.length === 0) return;
+
+  const minX = Math.min(...points.map(p => p.x));
+  const maxX = Math.max(...points.map(p => p.x));
+  const minY = Math.min(...points.map(p => p.y));
+  const maxY = Math.max(...points.map(p => p.y));
+
+  function toCanvasX(x) {
+    return padding + (x - minX) / (maxX - minX) * (canvas.width - 2 * padding);
+  }
+
+  function toCanvasY(y) {
+    return canvas.height - padding - (y - minY) / (maxY - minY) * (canvas.height - 2 * padding);
+  }
+
+  // 軸
+  ctx.strokeStyle = "#888";
+  ctx.beginPath();
+  ctx.moveTo(padding, padding);
+  ctx.lineTo(padding, canvas.height - padding);
+  ctx.lineTo(canvas.width - padding, canvas.height - padding);
+  ctx.stroke();
+
+  // Y軸目盛
+  ctx.fillStyle = "black";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  const steps = 6;
+  for (let i = 0; i <= steps; i++) {
+    const y = minY + (maxY - minY) * i / steps;
+    const cy = toCanvasY(y);
+    ctx.fillText(currentDisplayMode === "subs" ? Math.round(y) : y.toFixed(2), padding - 5, cy);
+    ctx.strokeStyle = "#eee";
+    ctx.beginPath();
+    ctx.moveTo(padding, cy);
+    ctx.lineTo(canvas.width - padding, cy);
+    ctx.stroke();
+  }
+
+  // X軸目盛
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (let i = 0; i <= steps; i++) {
+    const x = minX + (maxX - minX) * i / steps;
+    const cx = toCanvasX(x);
+    const date = new Date(x);
+    const label = date.toLocaleTimeString([], {
+      year: '2-digit', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    });
+    ctx.fillText(label, cx, canvas.height - padding + 5);
+    ctx.strokeStyle = "#eee";
+    ctx.beginPath();
+    ctx.moveTo(cx, padding);
+    ctx.lineTo(cx, canvas.height - padding);
+    ctx.stroke();
+  }
+
+  ctx.fillText("画面の最終更新時刻：" + new Date().toString(), 240, padding - 15);
+
+  // 折れ線と点
+  ctx.strokeStyle = "blue";
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const cx = toCanvasX(p.x);
+    const cy = toCanvasY(p.y);
+    if (i === 0) ctx.moveTo(cx, cy);
+    else ctx.lineTo(cx, cy);
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = "red";
+  points.forEach(p => {
+    const cx = toCanvasX(p.x);
+    const cy = toCanvasY(p.y);
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
+    ctx.fill();
+  });
+
+  window.setTimeout(() => fetchanddraw(), 10000);
+}
+
 
     function updateAvgRate() {
       const data = globalData;
@@ -159,7 +227,6 @@
       avgRateDisplay.textContent = `平均増加速度: ${avgRate} 人/${unitName}`;
     }
 
-    // 読み込み処理
     function fetchanddraw() {
       fetch('subs_log.txt', { cache: 'no-store' })
       .then(r => r.ok ? r.text() : Promise.reject())
@@ -176,8 +243,10 @@
         });
       });
     }
+
     fetchanddraw();
   </script>
+
   <a href="https://www.youtube.com/@%E3%82%86%E3%81%A3%E3%81%8F%E3%82%8Ahonebone">チャンネル</a>
 </body>
 </html>
