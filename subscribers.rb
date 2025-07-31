@@ -1,7 +1,8 @@
 LOGFILE = "subs_log.txt"
 URL = "https://www.youtube.com/@ゆっくりhonebone"
 prev_output = ""
-
+prev_save = ""
+prev_save_time = Time.now - 3000
 loop do
   time = Time.now
   timestamp = time.strftime("%Y/%m/%d %H:%M:%S")
@@ -24,6 +25,10 @@ loop do
     File.open(LOGFILE, "a:utf-8") { |f| f.puts line }
 
     # git操作を非同期で実行
+  end
+  if prev_save != output && time - prev_save_time > 300
+    prev_save = output
+    prev_save_time = time
     Thread.new do
       system("git add #{LOGFILE} > /dev/null 2>&1")
       system("git commit -m 'update at #{timestamp}' > /dev/null 2>&1")
