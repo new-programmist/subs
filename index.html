@@ -193,13 +193,21 @@
   });
   ctx.stroke();
 
-  ctx.fillStyle = "red";
+
   points.forEach(p => {
     const cx = toCanvasX(p.x);
     const cy = toCanvasY(p.y);
-    ctx.beginPath();
-    ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
-    ctx.fill();
+　　if (data[i].subs === 1000) {
+      ctx.fillStyle = "green";
+	    ctx.beginPath();
+  	  ctx.arc(cx, cy, 9, 0, 2 * Math.PI);
+  	  ctx.fill();　　  
+　　} else {
+      ctx.fillStyle = "red";
+	    ctx.beginPath();
+  	  ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
+  	  ctx.fill();
+  	}
   });
 
   window.setTimeout(() => fetchanddraw(), 10000);
